@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,9 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    /**
-     * 회원가입
-     */
+    use ApiResponse;
+
     public function register(Request $request): JsonResponse
     {
         $request->validate([
@@ -23,23 +23,19 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
 
-        $user = User::create([
+        $user  = User::create([
             'name'     => $request->name,
             'email'    => $request->email,
             'password' => Hash::make($request->password),
         ]);
-
         $token = $user->createToken('mobile')->plainTextToken;
 
-        return response()->json([
+        return $this->created([
             'token' => $token,
             'user'  => $user,
-        ], 201);
+        ], '회원가입이 완료되었습니다.');
     }
 
-    /**
-     * 로그인
-     */
     public function login(Request $request): JsonResponse
     {
         $request->validate([
@@ -57,43 +53,28 @@ class AuthController extends Controller
 
         $token = $user->createToken('mobile')->plainTextToken;
 
-        return response()->json([
+        return $this->success([
             'token' => $token,
             'user'  => $user,
-        ]);
+        ], '로그인되었습니다.');
     }
 
-    /**
-     * 내 정보 조회
-     */
     public function me(Request $request): JsonResponse
     {
-        return response()->json([
-            'user' => $request->user(),
-        ]);
+        return $this->success($request->user());
     }
 
-    /**
-     * 로그아웃 (현재 토큰만 삭제)
-     */
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json([
-            'message' => '로그아웃 되었습니다.',
-        ]);
+        return $this->success(message: '로그아웃 되었습니다.');
     }
 
-    /**
-     * 전체 기기 로그아웃 (모든 토큰 삭제)
-     */
     public function logoutAll(Request $request): JsonResponse
     {
         $request->user()->tokens()->delete();
 
-        return response()->json([
-            'message' => '모든 기기에서 로그아웃 되었습니다.',
-        ]);
+        return $this->success(message: '모든 기기에서 로그아웃 되었습니다.');
     }
 }
