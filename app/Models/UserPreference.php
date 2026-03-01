@@ -15,6 +15,13 @@ class UserPreference extends Model
         'notification_enabled',
     ];
 
+    protected $attributes = [
+        'language'             => 'ko',
+        'currency'             => 'KRW',
+        'timezone'             => 'Asia/Seoul',
+        'notification_enabled' => true,
+    ];
+
     protected function casts(): array
     {
         return [
