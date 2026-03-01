@@ -365,6 +365,72 @@ ItineraryItem
 
 ---
 
+## 테스트
+
+### 실행 방법
+
+```bash
+sail artisan test                # 전체 테스트 실행
+sail artisan test --coverage     # 커버리지 포함
+sail artisan test --filter=Api   # API 테스트만 실행
+```
+
+### 테스트 환경
+
+`phpunit.xml`에서 테스트 전용 환경 변수를 설정합니다.
+
+| 항목 | 값 |
+|------|-----|
+| `APP_ENV` | `testing` |
+| `DB_DATABASE` | `testing` (PostgreSQL) |
+| `CACHE_STORE` | `array` |
+| `SESSION_DRIVER` | `array` |
+| `BCRYPT_ROUNDS` | `4` |
+
+> PostgreSQL에 `testing` 데이터베이스가 필요합니다.
+> ```bash
+> sail psql -c "CREATE DATABASE testing;"
+> ```
+
+### 테스트 구조
+
+```
+tests/
+├── Unit/
+│   └── ExampleTest.php
+└── Feature/
+    └── Api/
+        ├── AuthTest.php           # 회원가입, 로그인, me, logout (11개)
+        ├── ProfileTest.php        # 프로필, 비밀번호, 선호 설정 (11개)
+        ├── PlaceTest.php          # 장소 목록/검색/필터, 상세 (9개)
+        ├── ItineraryTest.php      # 일정 CRUD, 권한 체크 (15개)
+        └── ItineraryItemTest.php  # 아이템 CRUD, 권한 체크 (12개)
+```
+
+### 커버리지 결과
+
+| 파일 | 커버리지 |
+|------|:-------:|
+| `AuthController` | 100% |
+| `ItineraryController` | 100% |
+| `ItineraryItemController` | 100% |
+| `PlaceController` | 100% |
+| `ProfileController` | 100% |
+| `ApiResponse` trait | 87.5% |
+| 모델 (5개) | 75 ~ 100% |
+| **전체** | **96.8%** |
+
+### Model Factories
+
+| Factory | 용도 |
+|---------|------|
+| `UserFactory` | 기본 제공 (Laravel) |
+| `PlaceFactory` | 장소 테스트 데이터 |
+| `ItineraryFactory` | 일정 테스트 데이터 |
+| `ItineraryItemFactory` | 아이템 테스트 데이터 |
+
+---
+
 ## 라이선스
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
