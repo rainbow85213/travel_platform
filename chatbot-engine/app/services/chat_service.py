@@ -1,52 +1,78 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
 
+SYSTEM_PROMPT = "너는 10년 경력의 친절한 여행 플래너야"
 
-SYSTEM_PROMPT = """당신은 여행 플랫폼의 친절한 AI 여행 도우미입니다.
-사용자의 여행 계획, 여행지 추천, 일정 구성 등을 도와줍니다.
-항상 한국어로 답변하고, 구체적이고 실용적인 정보를 제공하세요."""
+# ---------------------------------------------------------------------------
+# 세션 스토어 (in-memory, 서버 재시작 시 초기화)
+# 프로덕션에서는 Redis 등 영속 스토리지로 교체
+# ---------------------------------------------------------------------------
+_store: dict[str, InMemoryChatMessageHistory] = {}
+
+
+def _get_session_history(session_id: str) -> BaseChatMessageHistory:
+    if session_id not in _store:
+        _store[session_id] = InMemoryChatMessageHistory()
+    return _store[session_id]
 
 
 class ChatService:
     def __init__(self) -> None:
-        self._llm = ChatOpenAI(
+        llm = ChatOpenAI(
             api_key=settings.openai_api_key,
-            model=settings.openai_model,
+            model=settings.openai_model,          # gpt-4o-mini
             temperature=settings.openai_temperature,
             max_tokens=settings.openai_max_tokens,
         )
 
-        self._prompt = ChatPromptTemplate.from_messages([
+        prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{message}"),
         ])
 
-        self._chain = self._prompt | self._llm
+        # RunnableWithMessageHistory: 호출마다 자동으로 세션 히스토리 로드/저장
+        self._chain = RunnableWithMessageHistory(
+            prompt | llm,
+            _get_session_history,
+            input_messages_key="message",
+            history_messages_key="history",
+        )
 
-    def chat(self, message: str, history: list[dict] | None = None) -> str:
+    def chat(self, message: str, session_id: str) -> str:
         """
-        단일 메시지 응답.
+        세션 메모리를 유지하며 AI 응답을 반환합니다.
 
         Args:
-            message:  사용자 메시지
-            history:  이전 대화 목록 [{"role": "user"|"assistant", "content": "..."}]
+            message:    사용자 입력 메시지
+            session_id: 대화 세션 식별자 (클라이언트가 유지)
 
         Returns:
             AI 응답 문자열
         """
-        lc_history = self._build_history(history or [])
-        response = self._chain.invoke({"message": message, "history": lc_history})
+        response = self._chain.invoke(
+            {"message": message},
+            config={"configurable": {"session_id": session_id}},
+        )
         return response.content
 
-    def _build_history(self, history: list[dict]) -> list[HumanMessage | AIMessage]:
-        messages: list[HumanMessage | AIMessage] = []
-        for item in history:
-            if item.get("role") == "user":
-                messages.append(HumanMessage(content=item["content"]))
-            elif item.get("role") == "assistant":
-                messages.append(AIMessage(content=item["content"]))
-        return messages
+    def get_history(self, session_id: str) -> list[dict]:
+        """세션의 대화 이력을 반환합니다."""
+        history = _get_session_history(session_id)
+        result = []
+        for msg in history.messages:
+            if isinstance(msg, HumanMessage):
+                result.append({"role": "user", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                result.append({"role": "assistant", "content": msg.content})
+        return result
+
+    def clear_session(self, session_id: str) -> None:
+        """세션 대화 이력을 삭제합니다."""
+        if session_id in _store:
+            del _store[session_id]
