@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'tourcast' => [
+        'base_url' => env('TOURCAST_BASE_URL', 'https://api.tourcast.io/v1'),
+        'api_key'  => env('TOURCAST_API_KEY', ''),
+        'timeout'  => (int) env('TOURCAST_TIMEOUT', 10),
+        'retry'    => (int) env('TOURCAST_RETRY', 3),
+    ],
+
 ];
