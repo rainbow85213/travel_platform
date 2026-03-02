@@ -62,8 +62,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // 여행 일정
     // ---------------------------------------------------------------------
     Route::prefix('itineraries')->group(function () {
-        Route::get( '',               [ItineraryController::class, 'index']);   // 내 일정 목록
-        Route::post('',               [ItineraryController::class, 'store']);   // 일정 생성
+        Route::get( '',               [ItineraryController::class, 'index']);        // 내 일정 목록
+        Route::post('',               [ItineraryController::class, 'store']);        // 일정 생성
+        Route::post('save',           [ItineraryController::class, 'saveFromChatbot']); // 챗봇 일정 저장
         Route::get( '{itinerary}',    [ItineraryController::class, 'show']);    // 일정 상세 (items.place 포함)
         Route::put( '{itinerary}',    [ItineraryController::class, 'update']); // 일정 수정
         Route::delete('{itinerary}',  [ItineraryController::class, 'destroy']); // 일정 삭제 (SoftDelete)
