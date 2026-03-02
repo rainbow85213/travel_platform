@@ -1,30 +1,24 @@
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
+from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.core.config import settings
-from app.tools.travel_tools import get_tour_detail, search_places, search_tours
+from app.schemas.itinerary import ChatOutput, ItineraryItem
+from app.tools.travel_tools import finalize_itinerary, get_tour_detail, search_places, search_tours
 
 SYSTEM_PROMPT = (
-    "너는 10년 경력의 친절한 여행 플래너야. "
-    "사용자가 여행지나 여행 상품 정보를 요청하면 반드시 제공된 도구(tool)를 사용해 "
-    "실제 데이터를 조회한 뒤 한국어로 친절하고 구체적으로 답변해 줘."
+    "너는 10년 경력의 친절한 여행 플래너야. 항상 한국어로 답변해.\n\n"
+    "## 도구 사용 규칙\n"
+    "- 여행지·상품 정보 요청 시 search_places, search_tours, get_tour_detail 도구로 실제 데이터를 조회해.\n\n"
+    "## 일정 확정 규칙 (중요)\n"
+    "사용자가 '확정', '이걸로 해줘', '좋아', '그대로 가자' 등 일정에 동의하면 "
+    "반드시 finalize_itinerary 도구를 호출해야 해.\n"
+    "- 텍스트로 JSON을 출력하는 것은 절대 금지\n"
+    "- finalize_itinerary 호출 시 모든 장소의 일차·시간·장소명·위도·경도·설명을 빠짐없이 포함\n"
+    "- 위도·경도는 실제 좌표값을 사용 (모르면 합리적인 근사값 사용)\n"
+    "- 일정이 아직 논의 중이거나 사용자가 동의하지 않은 상태에서는 호출하지 마\n"
 )
-
-# ---------------------------------------------------------------------------
-# 세션 스토어 (in-memory, 서버 재시작 시 초기화)
-# 프로덕션에서는 Redis 등 영속 스토리지로 교체
-# ---------------------------------------------------------------------------
-_store: dict[str, InMemoryChatMessageHistory] = {}
-
-
-def _get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in _store:
-        _store[session_id] = InMemoryChatMessageHistory()
-    return _store[session_id]
 
 
 class ChatService:
@@ -36,28 +30,18 @@ class ChatService:
             max_tokens=settings.openai_max_tokens,
         )
 
-        tools = [search_places, search_tours, get_tour_detail]
+        tools = [search_places, search_tours, get_tour_detail, finalize_itinerary]
 
-        # agent_scratchpad: 도구 호출/결과 중간 단계를 담는 슬롯
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{message}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-
-        agent = create_tool_calling_agent(llm, tools, prompt)
-        agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
-
-        # RunnableWithMessageHistory: 세션별 대화 맥락 자동 관리
-        self._chain = RunnableWithMessageHistory(
-            agent_executor,
-            _get_session_history,
-            input_messages_key="message",
-            history_messages_key="history",
+        # LangGraph checkpointer로 세션별 대화 이력 관리
+        self._checkpointer = MemorySaver()
+        self._agent = create_agent(
+            llm,
+            tools,
+            system_prompt=SYSTEM_PROMPT,
+            checkpointer=self._checkpointer,
         )
 
-    def chat(self, message: str, session_id: str) -> str:
+    def chat(self, message: str, session_id: str) -> ChatOutput:
         """
         세션 메모리를 유지하며 AI(Tool Calling Agent) 응답을 반환합니다.
 
@@ -66,26 +50,70 @@ class ChatService:
             session_id: 대화 세션 식별자
 
         Returns:
-            AI 최종 응답 문자열
+            ChatOutput (type, message, itinerary)
         """
-        response = self._chain.invoke(
-            {"message": message},
-            config={"configurable": {"session_id": session_id}},
+        result = self._agent.invoke(
+            {"messages": [HumanMessage(content=message)]},
+            config={"configurable": {"thread_id": session_id}},
         )
-        return response["output"]
+
+        messages = result.get("messages", [])
+
+        # 마지막 AI 텍스트 응답 추출
+        ai_text = ""
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                ai_text = msg.content if isinstance(msg.content, str) else str(msg.content)
+                break
+
+        # finalize_itinerary 호출 여부 및 args 추출
+        itinerary: list[ItineraryItem] | None = None
+        for msg in messages:
+            if not isinstance(msg, AIMessage):
+                continue
+            for tc in (msg.tool_calls or []):
+                if tc.get("name") == "finalize_itinerary":
+                    raw_items = tc.get("args", {}).get("items", [])
+                    try:
+                        itinerary = [
+                            ItineraryItem(**i) if isinstance(i, dict) else i
+                            for i in raw_items
+                        ]
+                    except Exception:
+                        itinerary = None
+                    break
+            if itinerary is not None:
+                break
+
+        return ChatOutput(
+            type="itinerary" if itinerary else "message",
+            message=ai_text,
+            itinerary=itinerary,
+        )
 
     def get_history(self, session_id: str) -> list[dict]:
         """세션의 대화 이력을 반환합니다."""
-        history = _get_session_history(session_id)
-        result = []
-        for msg in history.messages:
-            if isinstance(msg, HumanMessage):
-                result.append({"role": "user", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                result.append({"role": "assistant", "content": msg.content})
-        return result
+        try:
+            state = self._agent.get_state(
+                config={"configurable": {"thread_id": session_id}}
+            )
+            result = []
+            for msg in state.values.get("messages", []):
+                if isinstance(msg, HumanMessage):
+                    result.append({"role": "user", "content": msg.content})
+                elif isinstance(msg, AIMessage) and msg.content:
+                    result.append({"role": "assistant", "content": msg.content})
+            return result
+        except Exception:
+            return []
 
     def clear_session(self, session_id: str) -> None:
         """세션 대화 이력을 삭제합니다."""
-        if session_id in _store:
-            del _store[session_id]
+        # MemorySaver는 직접 삭제 API가 없으므로 빈 상태로 덮어씁니다
+        try:
+            self._agent.update_state(
+                config={"configurable": {"thread_id": session_id}},
+                values={"messages": []},
+            )
+        except Exception:
+            pass

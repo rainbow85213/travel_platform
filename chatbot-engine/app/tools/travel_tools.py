@@ -9,6 +9,7 @@ import httpx
 from langchain_core.tools import tool
 
 from app.core.config import settings
+from app.schemas.itinerary import FinalizeItineraryInput, ItineraryItem
 
 
 # ---------------------------------------------------------------------------
@@ -194,3 +195,13 @@ def get_tour_detail(tour_id: str) -> str:
         lines.append(f"평점    : ★ {tour['rating']}")
 
     return "\n".join(lines)
+
+
+@tool(args_schema=FinalizeItineraryInput)
+def finalize_itinerary(items: list[ItineraryItem]) -> str:
+    """
+    사용자와 합의된 여행 일정을 최종 확정합니다.
+    모든 방문 장소의 일차·시간·장소명·위도·경도·설명을 포함해야 합니다.
+    일정이 완전히 확정되기 전에는 호출하지 마세요.
+    """
+    return f"여행 일정 {len(items)}개 장소가 확정되었습니다."

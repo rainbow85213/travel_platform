@@ -431,6 +431,131 @@ tests/
 
 ---
 
+---
+
+## 챗봇 엔진 (chatbot-engine)
+
+Python 기반 AI 여행 플래너 서비스입니다. LangChain + LangGraph + OpenAI를 사용하며, 대화 맥락을 유지하면서 여행 일정을 구조화된 JSON으로 반환합니다.
+
+### 기술 스택
+
+| 항목 | 버전 |
+|------|------|
+| Python | 3.13 |
+| FastAPI | - |
+| LangChain | 1.x |
+| LangGraph | 1.x |
+| langchain-openai | 1.x |
+
+### 설치 및 실행
+
+```bash
+cd chatbot-engine
+
+# 가상환경 생성 및 활성화
+python3 -m venv venv
+source venv/bin/activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 환경 파일 설정
+cp .env.example .env
+# .env 에 OPENAI_API_KEY 입력
+
+# 서버 실행 (기본 포트 8000)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 환경 변수 (chatbot-engine/.env.example)
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `OPENAI_API_KEY` | OpenAI API 키 | (필수) |
+| `OPENAI_MODEL` | 사용 모델 | `gpt-4o-mini` |
+| `OPENAI_TEMPERATURE` | 생성 온도 | `0.7` |
+| `OPENAI_MAX_TOKENS` | 최대 토큰 | `1024` |
+| `LARAVEL_API_URL` | Laravel API URL | `http://localhost/api` |
+| `LARAVEL_SERVICE_TOKEN` | Sanctum 서비스 토큰 | - |
+| `TOURCAST_BASE_URL` | TourCast API URL | `https://api.tourcast.io/v1` |
+| `TOURCAST_API_KEY` | TourCast API 키 | - |
+
+> `chatbot-engine/.env` 는 Laravel `.env` 와 별도 파일입니다. 두 파일을 혼용하지 마세요.
+
+### API 엔드포인트
+
+| 메서드 | 엔드포인트 | 설명 |
+|--------|-----------|------|
+| `POST` | `/chat` | 챗봇 메시지 전송 |
+| `GET` | `/chat/{session_id}/history` | 대화 이력 조회 |
+| `DELETE` | `/chat/{session_id}` | 세션 삭제 |
+| `GET` | `/chat/health` | 헬스 체크 |
+
+### 챗봇 응답 형식
+
+#### 일반 대화 (`type: "message"`)
+
+```json
+{
+    "success": true,
+    "message": "성공",
+    "data": {
+        "session_id": "user-123",
+        "type": "message",
+        "reply": "제주도 3박 4일 일정을 구성해 드릴게요! 어떤 스타일을 선호하세요?",
+        "itinerary": null
+    }
+}
+```
+
+#### 일정 확정 (`type: "itinerary"`)
+
+사용자가 일정에 동의하면 AI가 `finalize_itinerary` 도구를 자동 호출하여 구조화된 JSON을 반환합니다.
+
+```json
+{
+    "success": true,
+    "message": "성공",
+    "data": {
+        "session_id": "user-123",
+        "type": "itinerary",
+        "reply": "제주도 1박 2일 일정이 확정되었습니다!",
+        "itinerary": [
+            {
+                "day": 1,
+                "time": "09:00",
+                "place": "성산일출봉",
+                "latitude": 33.4589,
+                "longitude": 126.9425,
+                "description": "유네스코 세계자연유산, 일출 명소"
+            }
+        ]
+    }
+}
+```
+
+### 사용 가능한 도구 (Tools)
+
+| 도구 | 설명 |
+|------|------|
+| `search_places` | Laravel `/api/places` 에서 여행지 검색 |
+| `search_tours` | TourCast API 에서 투어 상품 검색 |
+| `get_tour_detail` | TourCast API 에서 투어 상세 조회 |
+| `finalize_itinerary` | 합의된 여행 일정을 구조화된 JSON으로 확정 |
+
+### 아키텍처
+
+```
+POST /chat
+  └─ ChatService.chat()
+       └─ LangGraph Agent (create_agent + MemorySaver)
+            ├─ 도구 호출: search_places / search_tours / get_tour_detail
+            └─ 일정 확정: finalize_itinerary(items=[{day,time,place,lat,lng,desc},...])
+                  └─ messages 에서 tool_calls 추출 → ChatOutput(type="itinerary")
+```
+
+---
+
 ## 라이선스
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

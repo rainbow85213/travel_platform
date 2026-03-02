@@ -51,8 +51,13 @@ async def send_message(body: ChatRequest) -> ChatResponse:
     이후 요청에서는 발급된 `session_id`를 반드시 포함하세요.
     """
     try:
-        reply = _service.chat(message=body.message, session_id=body.session_id)
-        return ChatResponse(data={"reply": reply, "session_id": body.session_id})
+        result = _service.chat(message=body.message, session_id=body.session_id)
+        return ChatResponse(data={
+            "session_id": body.session_id,
+            "type":       result.type,
+            "reply":      result.message,
+            "itinerary":  [i.model_dump() for i in result.itinerary] if result.itinerary else None,
+        })
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI 서비스 오류: {e!s}")
 
