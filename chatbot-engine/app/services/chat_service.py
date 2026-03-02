@@ -109,11 +109,4 @@ class ChatService:
 
     def clear_session(self, session_id: str) -> None:
         """세션 대화 이력을 삭제합니다."""
-        # MemorySaver는 직접 삭제 API가 없으므로 빈 상태로 덮어씁니다
-        try:
-            self._agent.update_state(
-                config={"configurable": {"thread_id": session_id}},
-                values={"messages": []},
-            )
-        except Exception:
-            pass
+        self._checkpointer.delete_thread(session_id)
