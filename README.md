@@ -431,6 +431,22 @@ tests/
 
 ---
 
+## 시드 데이터
+
+개발/테스트용 한국 여행지 데이터를 제공합니다.
+
+```bash
+sail artisan db:seed --class=PlaceSeeder
+```
+
+| 지역 | 장소 |
+|------|------|
+| 제주 (7) | 성산일출봉, 한라산 국립공원, 만장굴, 섭지코지, 협재해수욕장, 우도, 흑돼지거리 |
+| 부산 (4) | 해운대해수욕장, 광안리해수욕장, 감천문화마을, 자갈치시장 |
+| 서울 (4) | 경복궁, 북촌한옥마을, 남산서울타워, 명동 |
+
+> `DatabaseSeeder`에서 `PlaceSeeder`를 호출하므로 `sail artisan db:seed`로도 삽입됩니다.
+
 ---
 
 ## 챗봇 엔진 (chatbot-engine)
@@ -481,6 +497,28 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | `TOURCAST_API_KEY` | TourCast API 키 | - |
 
 > `chatbot-engine/.env` 는 Laravel `.env` 와 별도 파일입니다. 두 파일을 혼용하지 마세요.
+
+### Laravel API 연동 설정
+
+챗봇이 `search_places` 도구로 Laravel DB를 조회하려면 Sanctum 서비스 토큰이 필요합니다.
+
+```bash
+# 1. Laravel Sail 기동
+sail up -d
+
+# 2. 서비스 토큰 발급 (tinker)
+sail artisan tinker --execute="
+\$user = \App\Models\User::firstOrCreate(
+    ['email' => 'chatbot@internal.local'],
+    ['name' => 'ChatbotService', 'password' => bcrypt('unused')]
+);
+echo \$user->createToken('chatbot-engine-service')->plainTextToken;
+"
+
+# 3. chatbot-engine/.env 에 설정
+LARAVEL_API_URL=http://localhost/api
+LARAVEL_SERVICE_TOKEN=<발급된_토큰>
+```
 
 ### API 엔드포인트
 
