@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\ItineraryController;
 use App\Http\Controllers\Api\ItineraryItemController;
 use App\Http\Controllers\Api\PlaceController;
@@ -20,6 +21,10 @@ use Illuminate\Support\Facades\Route;
 // =========================================================================
 // 인증 불필요
 // =========================================================================
+
+// 챗봇
+Route::post('chat', [ChatController::class, 'chat']);
+
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']); // 회원가입
     Route::post('login',    [AuthController::class, 'login']);    // 로그인
