@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Development Docker
+compose.yaml
+docker-compose*.yml
+
+# Laravel dev/test
+.env
+.env.*
+!.env.example
+storage/app/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+
+# Dependencies (rebuilt in Docker)
+/vendor
+/node_modules
+
+# Testing
+/tests
+phpunit.xml
+.phpunit.result.cache
+
+# Dev tools
+.editorconfig
+.php-cs-fixer.cache
+.phpstan.neon
+pint.json
+
+# Docs
+README.md
+*.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+Thumbs.db

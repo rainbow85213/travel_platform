@@ -1,0 +1,47 @@
+# fly.toml app configuration file generated for travel-platform on 2026-03-15T02:48:10+09:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'travel-platform'
+primary_region = 'nrt'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  APP_DEBUG = 'false'
+  APP_ENV = 'production'
+  CACHE_STORE = 'redis'
+  DB_CONNECTION = 'pgsql'
+  DB_PORT = '5432'
+  LOG_CHANNEL = 'stderr'
+  LOG_DEPRECATIONS_CHANNEL = 'null'
+  LOG_LEVEL = 'error'
+  QUEUE_CONNECTION = 'redis'
+  REDIS_PORT = '6379'
+  SESSION_DRIVER = 'redis'
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 200
+    soft_limit = 150
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/'
+
+[[vm]]
+  memory = '512mb'
+  cpus = 1
+  memory_mb = 512
