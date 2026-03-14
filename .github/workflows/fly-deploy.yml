@@ -56,7 +56,7 @@ jobs:
           DB_PASSWORD: password
           CACHE_STORE: array
           SESSION_DRIVER: array
-        run: php artisan test --parallel
+        run: php artisan test
 
   deploy:
     name: Deploy
