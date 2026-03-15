@@ -2,12 +2,13 @@
 set -e
 
 # Parse DATABASE_URL → DB_* vars (Fly Postgres attach 시 자동 주입)
+# PHP parse_url() 사용 → ?sslmode=disable 등 query string 안전하게 제거
 if [ -n "$DATABASE_URL" ]; then
-  export DB_HOST=$(echo "$DATABASE_URL" | sed -e 's/^postgres:\/\/[^:]*:[^@]*@//' -e 's/:.*//' -e 's/\/.*//')
-  export DB_PORT=$(echo "$DATABASE_URL" | sed -e 's/.*:\([0-9]*\)\/.*/\1/')
-  export DB_DATABASE=$(echo "$DATABASE_URL" | sed -e 's/.*\///')
-  export DB_USERNAME=$(echo "$DATABASE_URL" | sed -e 's/postgres:\/\/\([^:]*\):.*/\1/')
-  export DB_PASSWORD=$(echo "$DATABASE_URL" | sed -e 's/postgres:\/\/[^:]*:\([^@]*\)@.*/\1/')
+  export DB_HOST=$(php -r "echo parse_url(getenv('DATABASE_URL'), PHP_URL_HOST);")
+  export DB_PORT=$(php -r "echo parse_url(getenv('DATABASE_URL'), PHP_URL_PORT) ?: '5432';")
+  export DB_DATABASE=$(php -r "echo ltrim(parse_url(getenv('DATABASE_URL'), PHP_URL_PATH), '/');")
+  export DB_USERNAME=$(php -r "echo parse_url(getenv('DATABASE_URL'), PHP_URL_USER);")
+  export DB_PASSWORD=$(php -r "echo parse_url(getenv('DATABASE_URL'), PHP_URL_PASS);")
   echo "==> DATABASE_URL parsed: host=$DB_HOST db=$DB_DATABASE user=$DB_USERNAME"
 fi
 
