@@ -630,6 +630,92 @@ POST /chat
 
 ---
 
+## 프로덕션 배포 (Fly.io)
+
+### 인프라 구성
+
+| 항목 | 서비스 | 상세 |
+|------|--------|------|
+| **앱 서버** | Fly.io | 도쿄 리전 (nrt), 512MB RAM |
+| **데이터베이스** | Fly Postgres 17 | `travel-platform-db` |
+| **캐시 / 세션** | Upstash Redis (TLS) | `curious-newt-71742.upstash.io:6379` |
+| **AI** | OpenAI GPT-4o-mini | `OPENAI_API_KEY` |
+
+### 배포 URL
+
+```
+https://travel-platform.fly.dev
+```
+
+### 환경 변수 (Fly Secrets)
+
+| 변수 | 설명 |
+|------|------|
+| `APP_KEY` | Laravel 암호화 키 |
+| `APP_URL` | 배포 URL |
+| `DATABASE_URL` | Fly Postgres 연결 문자열 (자동 주입) |
+| `REDIS_HOST` | Upstash Redis 호스트 |
+| `REDIS_PASSWORD` | Upstash Redis 비밀번호 |
+| `REDIS_SCHEME` | `tls` |
+| `REDIS_PORT` | `6379` |
+| `OPENAI_API_KEY` | OpenAI API 키 |
+
+### CI/CD (GitHub Actions)
+
+`main` 브랜치에 push하면 자동으로 테스트 → 배포가 실행됩니다.
+
+```
+push to main
+  └─ Run Tests (PostgreSQL 17 서비스 컨테이너)
+       └─ Deploy to Fly.io (테스트 통과 시)
+```
+
+GitHub Secrets에 `FLY_API_TOKEN`이 등록되어 있어야 합니다.
+
+```bash
+# 토큰 발급
+fly tokens create deploy
+```
+
+### 수동 배포
+
+```bash
+# flyctl 설치
+brew install flyctl
+fly auth login
+
+# 배포
+fly deploy
+
+# 로그 확인
+fly logs --app travel-platform
+
+# SSH 접속
+fly ssh console --app travel-platform
+
+# 시드 데이터 주입
+fly ssh console --app travel-platform -C "php artisan db:seed --force"
+```
+
+### Docker 컨테이너 구성
+
+| 파일 | 역할 |
+|------|------|
+| `Dockerfile` | 멀티스테이지 프로덕션 빌드 (PHP 8.2-fpm + Nginx) |
+| `fly.toml` | Fly.io 앱 설정 |
+| `docker/nginx.conf` | Nginx 설정 |
+| `docker/supervisord.conf` | PHP-FPM + Nginx 동시 실행 |
+| `docker/php.ini` | 프로덕션 PHP 설정 (OPcache) |
+| `docker/start.sh` | 컨테이너 시작 스크립트 (migrate 포함) |
+
+### 헬스체크
+
+```
+GET /health  →  {"status": "ok"}
+```
+
+---
+
 ## 라이선스
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
