@@ -1,0 +1,21 @@
+meta {
+  name: 메시지 전송
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/chat
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "message": "도쿄 1박 2일 여행 일정 추천해줘"
+  }
+}

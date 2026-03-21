@@ -1,0 +1,48 @@
+meta {
+  name: 챗봇 일정 저장
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/itineraries/save
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "title": "도쿄 1박 2일",
+    "start_date": "2026-04-01",
+    "itinerary": [
+      {
+        "day": 1,
+        "time": "09:00",
+        "place": "신주쿠 교엔",
+        "latitude": 35.6851,
+        "longitude": 139.7100,
+        "description": "도쿄 최대 규모의 공원"
+      },
+      {
+        "day": 1,
+        "time": "12:00",
+        "place": "라멘 이치란",
+        "latitude": 35.6938,
+        "longitude": 139.7034,
+        "description": "유명한 돈코츠 라멘집"
+      },
+      {
+        "day": 2,
+        "time": "10:00",
+        "place": "도쿄 스카이트리",
+        "latitude": 35.7101,
+        "longitude": 139.8107,
+        "description": "도쿄 전경을 볼 수 있는 전망대"
+      }
+    ]
+  }
+}

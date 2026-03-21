@@ -1,0 +1,15 @@
+meta {
+  name: 프로필 조회
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/profile
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

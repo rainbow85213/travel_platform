@@ -22,9 +22,6 @@ use Illuminate\Support\Facades\Route;
 // 인증 불필요
 // =========================================================================
 
-// 챗봇
-Route::post('chat', [ChatController::class, 'chat']);
-
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']); // 회원가입
     Route::post('login',    [AuthController::class, 'login']);    // 로그인
@@ -34,6 +31,15 @@ Route::prefix('auth')->group(function () {
 // 인증 필요 (Authorization: Bearer {token})
 // =========================================================================
 Route::middleware('auth:sanctum')->group(function () {
+
+    // ---------------------------------------------------------------------
+    // 챗봇
+    // ---------------------------------------------------------------------
+    Route::prefix('chat')->group(function () {
+        Route::post('',        [ChatController::class, 'chat']);           // 메시지 전송
+        Route::get('history',  [ChatController::class, 'history']);        // 기록 조회
+        Route::delete('history', [ChatController::class, 'destroyHistory']); // 기록 삭제
+    });
 
     // ---------------------------------------------------------------------
     // 인증

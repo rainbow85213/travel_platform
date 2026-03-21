@@ -1,0 +1,21 @@
+meta {
+  name: 장소 목록
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/places
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  ~city: 제주
+  ~category: attraction
+  ~search: 한라산
+}
