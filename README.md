@@ -661,6 +661,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | `LARAVEL_SERVICE_TOKEN` | Sanctum 서비스 토큰 | - |
 | `TOURCAST_BASE_URL` | TourCast API URL | `https://api.tourcast.io/v1` |
 | `TOURCAST_API_KEY` | TourCast API 키 | - |
+| `ALLOWED_ORIGINS` | CORS 허용 출처 (JSON 배열) | `["http://localhost","http://localhost:8000"]` |
 
 > `chatbot-engine/.env` 는 Laravel `.env` 와 별도 파일입니다. 두 파일을 혼용하지 마세요.
 
@@ -752,7 +753,7 @@ LARAVEL_SERVICE_TOKEN=<발급된_토큰>
 ```
 POST /chat
   └─ ChatService.chat()
-       └─ LangGraph Agent (create_agent + MemorySaver)
+       └─ LangGraph Agent (create_react_agent + MemorySaver)
             ├─ 도구 호출: search_places / search_tours / get_tour_detail
             └─ 일정 확정: finalize_itinerary(items=[{day,time,place,lat,lng,desc},...])
                   └─ messages 에서 tool_calls 추출 → ChatOutput(type="itinerary")

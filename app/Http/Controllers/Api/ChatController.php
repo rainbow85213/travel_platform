@@ -7,6 +7,7 @@ use App\Models\ChatMessage;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
 
 class ChatController extends Controller
@@ -147,7 +148,9 @@ PROMPT;
             return $this->success($data, '응답 성공');
 
         } catch (\Exception $e) {
-            return $this->failure('AI 응답 생성에 실패했습니다: ' . $e->getMessage(), 500);
+            Log::error('OpenAI 호출 실패', ['error' => $e->getMessage(), 'user_id' => auth()->id()]);
+
+            return $this->failure('AI 응답 생성에 일시적인 오류가 발생했습니다.', 500);
         }
     }
 

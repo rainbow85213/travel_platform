@@ -30,5 +30,15 @@ class Settings(BaseSettings):
     tourcast_api_key: str = ""
     tourcast_timeout: int = 10
 
+    # CORS — 쉼표 구분 문자열 또는 JSON 배열로 주입 가능
+    # 예: ALLOWED_ORIGINS='["https://app.example.com","https://api.example.com"]'
+    allowed_origins: list[str] = [
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:8000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:80",
+    ]
+
 
 settings = Settings()

@@ -1,4 +1,4 @@
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -34,10 +34,10 @@ class ChatService:
 
         # LangGraph checkpointer로 세션별 대화 이력 관리
         self._checkpointer = MemorySaver()
-        self._agent = create_agent(
+        self._agent = create_react_agent(
             llm,
             tools,
-            system_prompt=SYSTEM_PROMPT,
+            prompt=SYSTEM_PROMPT,
             checkpointer=self._checkpointer,
         )
 

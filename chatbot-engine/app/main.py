@@ -35,20 +35,12 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # CORS
 # Laravel 백엔드(Sail: localhost:80)와 React Native 앱에서의 호출을 허용합니다.
-# 프로덕션에서는 allow_origins를 실제 도메인으로 제한하세요.
+# 허용 도메인은 ALLOWED_ORIGINS 환경변수(JSON 배열)로 주입하세요.
 # ---------------------------------------------------------------------------
-
-ALLOWED_ORIGINS = [
-    "http://localhost",          # Laravel Sail
-    "http://localhost:80",
-    "http://localhost:8000",     # 로컬 개발
-    "http://127.0.0.1",
-    "http://127.0.0.1:80",
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
