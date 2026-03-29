@@ -180,6 +180,25 @@ chatbot-engine/           # Python FastAPI 챗봇 서버 (별도 프로세스)
 | GET | `/api/chat/history` | 대화 기록 조회 |
 | DELETE | `/api/chat/history` | 대화 기록 전체 삭제 |
 
+### 일정 (TourCast 프록시)
+
+> userId는 인증된 사용자 기준으로 자동 주입 (`user_{id}`)
+
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/schedule/map` | 지도 아이템 조회 (date, filters 쿼리) |
+| GET | `/api/schedule/route` | 경로 조회 (date 쿼리) |
+| GET | `/api/schedule/heatmap` | 히트맵 조회 |
+| GET | `/api/schedule/list` | 여행 플랜 목록 (page, limit 쿼리) |
+| POST | `/api/schedule` | 여행 플랜 생성 (title, sourceText, items[]) |
+| PATCH | `/api/schedule/item/{itemId}` | 아이템 상태 변경 (status) |
+
+### 디바이스
+
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/user/device-token` | FCM 디바이스 토큰 저장 (device_token, device_platform) |
+
 ---
 
 ## 5. Environment Variables

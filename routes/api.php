@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ItineraryController;
 use App\Http\Controllers\Api\ItineraryItemController;
 use App\Http\Controllers\Api\PlaceController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -68,6 +69,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('',        [PlaceController::class, 'index']); // 목록 (검색/필터)
         Route::get('{place}', [PlaceController::class, 'show']);  // 상세
     });
+
+    // ---------------------------------------------------------------------
+    // 일정 (TourCast 프록시)
+    // ---------------------------------------------------------------------
+    Route::prefix('schedule')->group(function () {
+        Route::get('map',             [ScheduleController::class, 'map']);        // 지도 아이템
+        Route::get('route',           [ScheduleController::class, 'route']);      // 경로
+        Route::get('heatmap',         [ScheduleController::class, 'heatmap']);    // 히트맵
+        Route::get('list',            [ScheduleController::class, 'list']);       // 일정 목록
+        Route::post('',               [ScheduleController::class, 'store']);      // 일정 생성
+        Route::patch('item/{itemId}', [ScheduleController::class, 'updateItem']); // 아이템 상태 변경
+    });
+
+    // FCM 디바이스 토큰
+    Route::post('user/device-token', [ScheduleController::class, 'deviceToken']);
 
     // ---------------------------------------------------------------------
     // 여행 일정

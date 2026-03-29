@@ -15,6 +15,8 @@ class TourCastService
 {
     private Client $client;
 
+    private ?Client $scheduleClient = null;
+
     public function __construct(?Client $client = null)
     {
         if ($client === null && empty(config('services.tourcast.api_key'))) {
@@ -67,6 +69,49 @@ class TourCastService
     }
 
     // =========================================================================
+    // Schedule Proxy (TourCast /api/schedule/*)
+    // =========================================================================
+
+    /**
+     * TourCast GET /api/schedule/{$path} 프록시
+     *
+     * @param  array<string, mixed> $query
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    public function proxyScheduleGet(string $path, array $query = []): array
+    {
+        return $this->scheduleGet($path, $query);
+    }
+
+    /**
+     * TourCast POST /api/schedule/{$path} 프록시
+     *
+     * @param  array<string, mixed> $body
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    public function proxySchedulePost(string $path, array $body = []): array
+    {
+        return $this->schedulePost($path, $body);
+    }
+
+    /**
+     * TourCast PATCH /api/schedule/{$path} 프록시
+     *
+     * @param  array<string, mixed> $body
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    public function proxySchedulePatch(string $path, array $body = []): array
+    {
+        return $this->schedulePatch($path, $body);
+    }
+
+    // =========================================================================
     // Internal
     // =========================================================================
 
@@ -114,6 +159,94 @@ class TourCastService
         }
     }
 
+    /**
+     * @param  array<string, mixed> $query
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    private function scheduleGet(string $path, array $query = []): array
+    {
+        try {
+            $uri      = ltrim($path, '/');
+            $options  = $query ? ['query' => $query] : [];
+            $response = $this->getScheduleClient()->get($uri, $options);
+
+            return json_decode($response->getBody()->getContents(), true) ?? [];
+
+        } catch (ConnectException $e) {
+            Log::error('TourCast Schedule API 연결 실패', ['path' => $path, 'message' => $e->getMessage()]);
+            throw new TourCastException('TourCast API에 연결할 수 없습니다: ' . $e->getMessage(), 0, $e);
+
+        } catch (RequestException $e) {
+            $status = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $body   = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : $e->getMessage();
+            Log::error('TourCast Schedule API 요청 실패', ['path' => $path, 'status' => $status, 'body' => $body]);
+            throw new TourCastException("TourCast API 오류 (HTTP {$status}): {$body}", $status, $e);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed> $body
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    private function schedulePost(string $path, array $body = []): array
+    {
+        try {
+            $uri      = ltrim($path, '/');
+            $response = $this->getScheduleClient()->post($uri, ['json' => $body]);
+
+            return json_decode($response->getBody()->getContents(), true) ?? [];
+
+        } catch (ConnectException $e) {
+            Log::error('TourCast Schedule API 연결 실패', ['path' => $path, 'message' => $e->getMessage()]);
+            throw new TourCastException('TourCast API에 연결할 수 없습니다: ' . $e->getMessage(), 0, $e);
+
+        } catch (RequestException $e) {
+            $status = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $body   = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : $e->getMessage();
+            Log::error('TourCast Schedule API 요청 실패', ['path' => $path, 'status' => $status, 'body' => $body]);
+            throw new TourCastException("TourCast API 오류 (HTTP {$status}): {$body}", $status, $e);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed> $body
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    private function schedulePatch(string $path, array $body = []): array
+    {
+        try {
+            $uri      = ltrim($path, '/');
+            $response = $this->getScheduleClient()->patch($uri, ['json' => $body]);
+
+            return json_decode($response->getBody()->getContents(), true) ?? [];
+
+        } catch (ConnectException $e) {
+            Log::error('TourCast Schedule API 연결 실패', ['path' => $path, 'message' => $e->getMessage()]);
+            throw new TourCastException('TourCast API에 연결할 수 없습니다: ' . $e->getMessage(), 0, $e);
+
+        } catch (RequestException $e) {
+            $status = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $body   = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : $e->getMessage();
+            Log::error('TourCast Schedule API 요청 실패', ['path' => $path, 'status' => $status, 'body' => $body]);
+            throw new TourCastException("TourCast API 오류 (HTTP {$status}): {$body}", $status, $e);
+        }
+    }
+
+    private function getScheduleClient(): Client
+    {
+        if ($this->scheduleClient === null) {
+            $this->scheduleClient = $this->buildScheduleClient();
+        }
+
+        return $this->scheduleClient;
+    }
+
     private function buildClient(): Client
     {
         $stack = HandlerStack::create();
@@ -124,6 +257,31 @@ class TourCastService
 
         return new Client([
             'base_uri' => config('services.tourcast.base_url'),
+            'timeout'  => config('services.tourcast.timeout', 10),
+            'headers'  => [
+                'Authorization' => 'Bearer ' . config('services.tourcast.api_key', ''),
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/json',
+            ],
+            'handler'  => $stack,
+        ]);
+    }
+
+    private function buildScheduleClient(): Client
+    {
+        // base_url 예: https://api.tourcast.io/v1 또는 http://localhost:3000
+        // schedule 경로는 /api/schedule/* — /v1 없이 루트 기준
+        $baseUrl = rtrim(config('services.tourcast.base_url'), '/');
+        $rootUrl = preg_replace('/\/v\d+$/', '', $baseUrl);
+
+        $stack = HandlerStack::create();
+        $stack->push(Middleware::retry(
+            $this->retryDecider(),
+            $this->retryDelay()
+        ));
+
+        return new Client([
+            'base_uri' => $rootUrl . '/api/schedule/',
             'timeout'  => config('services.tourcast.timeout', 10),
             'headers'  => [
                 'Authorization' => 'Bearer ' . config('services.tourcast.api_key', ''),
