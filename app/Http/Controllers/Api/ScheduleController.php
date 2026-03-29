@@ -123,15 +123,17 @@ class ScheduleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'title'      => ['required', 'string', 'max:255'],
-            'sourceText' => ['sometimes', 'string'],
-            'items'      => ['sometimes', 'array'],
+            'title'          => ['required', 'string', 'max:255'],
+            'date'           => ['required', 'date_format:Y-m-d'],
+            'sourceText'     => ['sometimes', 'string'],
+            'items'          => ['sometimes', 'array'],
+            'items.*.order'  => ['required_with:items', 'integer'],
         ]);
 
         $user = $request->user();
 
         $body = array_merge(
-            $request->only(['title', 'sourceText', 'items']),
+            $request->only(['title', 'date', 'sourceText', 'items']),
             ['userId' => 'user_' . $user->id]
         );
 
