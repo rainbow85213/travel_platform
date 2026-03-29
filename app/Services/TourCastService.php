@@ -17,6 +17,10 @@ class TourCastService
 
     public function __construct(?Client $client = null)
     {
+        if ($client === null && empty(config('services.tourcast.api_key'))) {
+            Log::warning('TourCastService: TOURCAST_API_KEY가 설정되지 않았습니다. API 요청 시 인증 오류가 발생할 수 있습니다.');
+        }
+
         $this->client = $client ?? $this->buildClient();
     }
 

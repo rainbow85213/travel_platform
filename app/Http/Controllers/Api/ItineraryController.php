@@ -106,6 +106,9 @@ class ItineraryController extends Controller
             'itinerary.*.latitude'     => ['required', 'numeric', 'between:-90,90'],
             'itinerary.*.longitude'    => ['required', 'numeric', 'between:-180,180'],
             'itinerary.*.description'  => ['sometimes', 'nullable', 'string'],
+            'itinerary.*.category'     => ['sometimes', 'nullable', 'string', 'max:50'],
+            'itinerary.*.city'         => ['sometimes', 'nullable', 'string', 'max:100'],
+            'itinerary.*.country'      => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
 
         $startDate = Carbon::parse($data['start_date'] ?? today());
@@ -129,19 +132,37 @@ class ItineraryController extends Controller
             foreach ($data['itinerary'] as $item) {
                 $day = $item['day'];
 
-                // Place: 이름 일치 우선, 없으면 신규 생성
-                $place = Place::whereRaw('LOWER(name) = ?', [mb_strtolower($item['place'])])
+                // 1차: 위경도 반경 100m 이내 기존 장소 검색 (Haversine, PostGIS 불필요)
+                $lat   = $item['latitude'];
+                $lng   = $item['longitude'];
+                $delta = 0.001; // ~111m 바운딩 박스 사전 필터로 인덱스 활용
+
+                $place = Place::whereBetween('latitude',  [$lat - $delta, $lat + $delta])
+                    ->whereBetween('longitude', [$lng - $delta, $lng + $delta])
+                    ->whereRaw(
+                        '(6371000 * 2 * ASIN(SQRT(
+                            POWER(SIN(RADIANS(latitude - ?) / 2), 2) +
+                            COS(RADIANS(?)) * COS(RADIANS(latitude)) *
+                            POWER(SIN(RADIANS(longitude - ?) / 2), 2)
+                        ))) <= 100',
+                        [$lat, $lat, $lng]
+                    )
                     ->first();
+
+                // 2차: 이름 완전 일치 fallback
+                if (! $place) {
+                    $place = Place::whereRaw('LOWER(name) = ?', [mb_strtolower($item['place'])])->first();
+                }
 
                 if (! $place) {
                     $place = Place::create([
                         'name'        => $item['place'],
                         'description' => $item['description'] ?? null,
-                        'latitude'    => $item['latitude'],
-                        'longitude'   => $item['longitude'],
-                        'city'        => null,
-                        'country'     => null,
-                        'category'    => 'attraction',
+                        'latitude'    => $lat,
+                        'longitude'   => $lng,
+                        'city'        => $item['city'] ?? null,
+                        'country'     => $item['country'] ?? null,
+                        'category'    => $item['category'] ?? 'attraction',
                     ]);
                 }
 

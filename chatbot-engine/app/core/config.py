@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     laravel_api_timeout: int = 10
     laravel_service_token: str = ""  # Sanctum 서비스 토큰 (chatbot → Laravel)
 
+    # Redis (LangGraph 체크포인터)
+    redis_url: str = "redis://localhost:6379"
+
     # TourCast API (직접 호출)
     tourcast_base_url: str = "https://api.tourcast.io/v1"
     tourcast_api_key: str = ""

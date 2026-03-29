@@ -42,4 +42,9 @@ return [
         'retry'    => (int) env('TOURCAST_RETRY', 3),
     ],
 
+    'chatbot_engine' => [
+        'url'   => env('CHATBOT_ENGINE_URL', 'http://localhost:8001'),
+        'token' => env('LARAVEL_SERVICE_TOKEN'),
+    ],
+
 ];

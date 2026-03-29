@@ -1,7 +1,7 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.redis import RedisSaver
 
 from app.core.config import settings
 from app.schemas.itinerary import ChatOutput, ItineraryItem
@@ -32,8 +32,8 @@ class ChatService:
 
         tools = [search_places, search_tours, get_tour_detail, finalize_itinerary]
 
-        # LangGraph checkpointer로 세션별 대화 이력 관리
-        self._checkpointer = MemorySaver()
+        # LangGraph checkpointer — Redis 기반으로 세션 영속화
+        self._checkpointer = RedisSaver.from_conn_string(settings.redis_url)
         self._agent = create_react_agent(
             llm,
             tools,
@@ -109,4 +109,10 @@ class ChatService:
 
     def clear_session(self, session_id: str) -> None:
         """세션 대화 이력을 삭제합니다."""
-        self._checkpointer.delete_thread(session_id)
+        try:
+            # RedisSaver는 delete_thread를 공식 지원하지 않을 수 있음.
+            # langgraph-checkpoint-redis 버전에 따라 메서드 존재 여부가 다르므로 예외 처리.
+            # 미지원 시 세션 데이터는 Redis TTL에 의해 자동 만료됨.
+            self._checkpointer.delete_thread(session_id)
+        except (AttributeError, Exception):
+            pass

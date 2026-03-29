@@ -1,8 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.core.security import verify_token
 from app.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -40,7 +41,7 @@ class ChatResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=ChatResponse, summary="챗봇 메시지 전송")
-async def send_message(body: ChatRequest) -> ChatResponse:
+async def send_message(body: ChatRequest, _: None = Depends(verify_token)) -> ChatResponse:
     """
     사용자 메시지를 받아 AI 응답을 반환합니다.
 
@@ -63,14 +64,14 @@ async def send_message(body: ChatRequest) -> ChatResponse:
 
 
 @router.get("/{session_id}/history", summary="대화 이력 조회")
-async def get_history(session_id: str) -> ChatResponse:
+async def get_history(session_id: str, _: None = Depends(verify_token)) -> ChatResponse:
     """지정한 세션의 전체 대화 이력을 반환합니다."""
     history = _service.get_history(session_id)
     return ChatResponse(data={"session_id": session_id, "history": history})
 
 
 @router.delete("/{session_id}", summary="세션 대화 이력 삭제")
-async def clear_session(session_id: str) -> ChatResponse:
+async def clear_session(session_id: str, _: None = Depends(verify_token)) -> ChatResponse:
     """지정한 세션의 대화 이력을 모두 삭제합니다."""
     _service.clear_session(session_id)
     return ChatResponse(message="세션이 삭제되었습니다.", data={"session_id": session_id})

@@ -7,71 +7,12 @@ use App\Models\ChatMessage;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use OpenAI\Laravel\Facades\OpenAI;
 
 class ChatController extends Controller
 {
     use ApiResponse;
-
-    // 히스토리에서 OpenAI로 전달할 최대 메시지 수 (토큰 절약)
-    private const HISTORY_LIMIT = 20;
-
-    private const SYSTEM_PROMPT = <<<'PROMPT'
-당신은 Plango의 AI 여행 플래너입니다.
-사용자의 여행 계획 수립을 도와주는 친절하고 전문적인 어시스턴트입니다.
-여행지 추천, 일정 구성, 교통 및 숙박 정보, 현지 음식과 문화 등 여행과 관련된 모든 질문에 답해주세요.
-
-**응답은 반드시 아래 JSON 형식으로만 출력하세요.**
-
-일반 질문 응답 (날씨, 정보 안내 등 일정 추천이 아닐 때):
-{
-  "reply": "한국어 응답 텍스트",
-  "schedule": null
-}
-
-여행 일정을 추천할 때:
-{
-  "reply": "일정 요약을 포함한 한국어 응답 텍스트",
-  "schedule": [
-    {
-      "id": "item-1",
-      "title": "장소명",
-      "latitude": 37.1234,
-      "longitude": 127.1234,
-      "status": "pending",
-      "time": "09:00",
-      "scheduledAt": "YYYY-MM-DDTHH:mm:ssZ",
-      "category": "attraction",
-      "description": "장소 설명",
-      "order": 1
-    }
-  ]
-}
-
-**일정 작성 규칙:**
-1. 시간 순서대로 구성 (오전 → 오후 → 저녁)
-2. 각 장소는 실존하는 장소이며 정확한 위경도 좌표 포함 (지도 표시용)
-3. category는 반드시 "restaurant" | "attraction" | "accommodation" | "transport" | "other" 중 하나
-4. status는 항상 "pending"
-5. 하루 일정 기준 5~8개 항목 권장
-6. 사용자가 날짜를 언급하면 scheduledAt에 해당 날짜 사용, 없으면 오늘 날짜 기준으로 작성
-7. reply 텍스트는 반드시 날짜별로 상세하게 작성하세요. 예시:
-   "도쿄 1박 2일 일정을 준비했어요! 😊
-
-   📅 첫째 날
-   - 09:00 신주쿠 교엔 — 넓은 정원에서 여행 시작
-   - 12:00 이치란 라멘 — 진한 돈코츠 라멘으로 점심
-   - 14:00 메이지 신궁 — 도심 속 고즈넉한 신사
-   ...
-
-   📅 둘째 날
-   - 09:00 아사쿠사 센소지 — 도쿄의 대표 불교 사원
-   ..."
-   각 장소마다 시간과 간단한 설명을 포함하고, 이동 팁이나 추천 포인트도 자연스럽게 넣어주세요.
-
-JSON 이외의 텍스트는 절대 출력하지 마세요.
-PROMPT;
 
     public function chat(Request $request): JsonResponse
     {
@@ -81,45 +22,31 @@ PROMPT;
 
         $user = $request->user();
 
-        // DB에서 최근 대화 이력 로드
-        $history = ChatMessage::where('user_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->limit(self::HISTORY_LIMIT)
-            ->get()
-            ->reverse()
-            ->values();
-
-        $messages = [
-            ['role' => 'system', 'content' => trim(self::SYSTEM_PROMPT)],
-        ];
-
-        foreach ($history as $msg) {
-            $messages[] = [
-                'role'    => $msg->role,
-                'content' => $msg->role === 'assistant'
-                    ? json_encode(['reply' => $msg->text, 'schedule' => $msg->schedule], JSON_UNESCAPED_UNICODE)
-                    : $msg->text,
-            ];
-        }
-
-        $messages[] = ['role' => 'user', 'content' => $request->input('message')];
-
         try {
-            $response = OpenAI::chat()->create([
-                'model'           => config('openai.model', 'gpt-4o-mini'),
-                'messages'        => $messages,
-                'max_tokens'      => 2048,
-                'temperature'     => 0.7,
-                'response_format' => ['type' => 'json_object'],
-            ]);
+            $response = Http::withToken(config('services.chatbot_engine.token'))
+                ->timeout(60)
+                ->post(config('services.chatbot_engine.url') . '/chat', [
+                    'session_id' => 'user_' . $user->id,
+                    'message'    => $request->input('message'),
+                ]);
 
-            $raw = $response->choices[0]->message->content;
-            $parsed = json_decode($raw, true);
+            if (! $response->successful()) {
+                Log::error('chatbot-engine 호출 실패', [
+                    'status'  => $response->status(),
+                    'body'    => $response->body(),
+                    'user_id' => $user->id,
+                ]);
 
-            $reply    = $parsed['reply'] ?? $raw;
-            $schedule = $parsed['schedule'] ?? null;
+                return $this->failure('AI 응답 생성에 일시적인 오류가 발생했습니다.', 500);
+            }
 
-            // 빈 배열이면 null 처리
+            $data  = $response->json('data', []);
+            $reply = $data['reply'] ?? '';
+
+            // chatbot-engine은 일정 확정 시 'itinerary' 키로 반환
+            // 필드 구조: {day, time, place, latitude, longitude, description}
+            $schedule = $data['itinerary'] ?? null;
+
             if (is_array($schedule) && count($schedule) === 0) {
                 $schedule = null;
             }
@@ -140,15 +67,15 @@ PROMPT;
                 'schedule' => $schedule,
             ]);
 
-            $data = ['reply' => $reply];
+            $responseData = ['reply' => $reply];
             if ($schedule !== null) {
-                $data['schedule'] = $schedule;
+                $responseData['schedule'] = $schedule;
             }
 
-            return $this->success($data, '응답 성공');
+            return $this->success($responseData, '응답 성공');
 
         } catch (\Exception $e) {
-            Log::error('OpenAI 호출 실패', ['error' => $e->getMessage(), 'user_id' => auth()->id()]);
+            Log::error('chatbot-engine 호출 실패', ['error' => $e->getMessage(), 'user_id' => $user->id]);
 
             return $this->failure('AI 응답 생성에 일시적인 오류가 발생했습니다.', 500);
         }
