@@ -1,7 +1,7 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.redis import RedisSaver
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.core.config import settings
 from app.schemas.itinerary import ChatOutput, ItineraryItem
@@ -32,8 +32,10 @@ class ChatService:
 
         tools = [search_places, search_tours, get_tour_detail, finalize_itinerary]
 
-        # LangGraph checkpointer — Redis 기반으로 세션 영속화
-        self._checkpointer = RedisSaver.from_conn_string(settings.redis_url)
+        # LangGraph checkpointer — 인메모리 세션 관리
+        # Upstash Redis는 RediSearch(FT.*)를 미지원하므로 MemorySaver 사용
+        # 채팅 히스토리는 Laravel chat_messages 테이블에 영속 저장됨
+        self._checkpointer = MemorySaver()
         self._agent = create_react_agent(
             llm,
             tools,
