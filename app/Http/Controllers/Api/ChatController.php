@@ -17,18 +17,27 @@ class ChatController extends Controller
     public function chat(Request $request): JsonResponse
     {
         $request->validate([
-            'message' => ['required', 'string', 'max:1000'],
+            'message'   => ['required', 'string', 'max:1000'],
+            'latitude'  => ['sometimes', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
         ]);
 
         $user = $request->user();
 
         try {
+            $payload = [
+                'session_id' => 'user_' . $user->id,
+                'message'    => $request->input('message'),
+            ];
+
+            if ($request->filled('latitude') && $request->filled('longitude')) {
+                $payload['latitude']  = (float) $request->input('latitude');
+                $payload['longitude'] = (float) $request->input('longitude');
+            }
+
             $response = Http::withToken(config('services.chatbot_engine.token'))
                 ->timeout(60)
-                ->post(config('services.chatbot_engine.url') . '/chat', [
-                    'session_id' => 'user_' . $user->id,
-                    'message'    => $request->input('message'),
-                ]);
+                ->post(config('services.chatbot_engine.url') . '/chat', $payload);
 
             if (! $response->successful()) {
                 Log::error('chatbot-engine 호출 실패', [
