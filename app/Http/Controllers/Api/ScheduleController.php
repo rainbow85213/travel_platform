@@ -137,6 +137,14 @@ class ScheduleController extends Controller
             ['userId' => 'user_' . $user->id]
         );
 
+        // items.time 이 HH:MM 형식이 아닐 경우 정규화 (AI 자유형식 텍스트 방어)
+        if (isset($body['items']) && is_array($body['items'])) {
+            $body['items'] = array_map(
+                fn (array $item) => array_merge($item, ['time' => $this->normalizeTime($item['time'] ?? '09:00')]),
+                $body['items']
+            );
+        }
+
         try {
             $data = $this->tourCast->proxySchedulePost('', $body);
 
@@ -144,6 +152,46 @@ class ScheduleController extends Controller
         } catch (TourCastException $e) {
             return $this->failure('일정 생성에 실패했습니다.', 500);
         }
+    }
+
+    /**
+     * time 값을 TourCast가 요구하는 HH:MM 형식으로 정규화한다.
+     * AI가 "점심", "저녁" 등 자유형식 텍스트를 반환할 경우 대응 시간으로 변환.
+     */
+    private function normalizeTime(string $time): string
+    {
+        $time = trim($time);
+
+        // 이미 HH:MM 형식
+        if (preg_match('/^\d{2}:\d{2}$/', $time)) {
+            return $time;
+        }
+
+        // H:MM → HH:MM (한 자리 시)
+        if (preg_match('/^(\d):(\d{2})$/', $time, $m)) {
+            return sprintf('%02d:%s', (int) $m[1], $m[2]);
+        }
+
+        // 한국어 시간 표현 매핑
+        $koMap = [
+            '새벽' => '04:00',
+            '아침' => '08:00',
+            '오전' => '09:00',
+            '점심' => '12:00',
+            '오후' => '14:00',
+            '저녁' => '18:00',
+            '밤'   => '20:00',
+            '숙박' => '21:00',
+            '야간' => '21:00',
+        ];
+
+        foreach ($koMap as $ko => $hhmm) {
+            if (str_contains($time, $ko)) {
+                return $hhmm;
+            }
+        }
+
+        return '09:00'; // 매핑 없으면 기본값
     }
 
     /**

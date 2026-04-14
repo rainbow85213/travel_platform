@@ -33,6 +33,8 @@ def _build_system_prompt(lat: float | None, lng: float | None) -> str:
         "- 텍스트로 JSON을 출력하는 것은 절대 금지\n"
         "- finalize_itinerary 호출 시 모든 장소의 일차(day)·시간(time)·장소명(title)·"
         "위도(latitude)·경도(longitude)·설명(description)·카테고리(category)를 빠짐없이 포함\n"
+        "- time은 반드시 24시간 HH:MM 형식으로 입력 (예: 09:00, 12:30, 18:00). "
+        "'점심', '저녁', '아침' 같은 텍스트는 절대 사용 금지\n"
         "- 카테고리는 attraction(관광지), restaurant(음식점), accommodation(숙박), "
         "transport(교통), other(기타) 중 하나를 선택\n"
         "- 위도·경도는 실제 좌표값을 사용 (모르면 합리적인 근사값 사용)\n"
