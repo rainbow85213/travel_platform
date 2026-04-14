@@ -1,10 +1,15 @@
 """
 LangChain Tools — 여행 관련 외부 API 호출 도구
 
-- search_places   : Laravel /api/places  (여행지 검색)
-- search_tours    : TourCast /tours       (투어 상품 검색)
-- get_tour_detail : TourCast /tours/{id}  (투어 상세 조회)
+- search_places          : Laravel /api/places          (Laravel DB 장소 검색)
+- search_tourist_spots   : TourCast /tourist-spots       (관광지 검색)
+- get_tourist_spot_detail: TourCast /tourist-spots/{id}  (관광지 상세)
+- search_accommodations  : TourCast /api/accommodations  (숙박 검색)
+- search_nearby_places   : TourCast /api/spots/nearby    (현위치 기반 검색)
+- finalize_itinerary     : 일정 확정
 """
+import re
+
 import httpx
 from langchain_core.tools import tool
 
@@ -23,8 +28,9 @@ def _laravel_headers() -> dict:
     return headers
 
 
-def _tourcast_headers() -> dict:
-    return {"X-Api-Key": settings.tourcast_api_key, "Accept": "application/json"}
+def _tourcast_root_url() -> str:
+    """tourcast_base_url에서 /v1 suffix를 제거해 root URL 반환."""
+    return re.sub(r'/v\d+$', '', settings.tourcast_base_url.rstrip('/'))
 
 
 # ---------------------------------------------------------------------------
@@ -97,103 +103,140 @@ def search_places(
 
 
 @tool
-def search_tours(keyword: str, page: int = 1) -> str:
+def search_tourist_spots(keyword: str = "", city: str = "", limit: int = 10) -> str:
     """
-    TourCast API에서 여행 상품(투어)을 키워드로 검색합니다.
+    TourCast DB에서 관광지를 키워드 또는 도시명으로 검색합니다.
+    특정 지역의 볼거리, 관광지, 명소를 찾을 때 사용하세요.
 
     Args:
-        keyword: 검색 키워드 (예: "제주도", "오사카 맛집 투어", "유럽 배낭")
-        page:    페이지 번호 (기본값 1)
+        keyword: 검색 키워드 (예: "고양", "경복궁", "해운대"). 장소명이나 주소에서 검색.
+        city:    도시명 필터 (예: "고양시", "부산시", "제주시"). keyword와 함께 또는 단독 사용.
+        limit:   최대 결과 수 (기본값 10, 최대 20)
 
     Returns:
-        투어 상품 목록 (최대 5개) 또는 오류 메시지
+        관광지 목록 또는 오류 메시지
     """
-    if not settings.tourcast_api_key:
-        return "TourCast API 키가 설정되지 않았습니다. (.env TOURCAST_API_KEY 확인)"
+    if not keyword and not city:
+        return "keyword 또는 city 중 하나는 반드시 입력해 주세요."
+
+    params: dict = {"limit": min(limit, 20)}
+    if keyword:
+        params["keyword"] = keyword
+    if city:
+        params["city"] = city
 
     try:
         with httpx.Client(timeout=settings.tourcast_timeout) as client:
             resp = client.get(
-                f"{settings.tourcast_base_url}/tours",
-                params={"keyword": keyword, "page": page},
-                headers=_tourcast_headers(),
+                f"{_tourcast_root_url()}/tourist-spots",
+                params=params,
             )
             resp.raise_for_status()
             body = resp.json()
     except httpx.HTTPStatusError as e:
-        return f"투어 검색 오류 (HTTP {e.response.status_code})"
+        return f"관광지 검색 오류 (HTTP {e.response.status_code})"
     except httpx.RequestError as e:
         return f"TourCast API 연결 실패: {e}"
 
-    # TourCast 응답 형식: list 또는 {data: [...]} 또는 {tours: [...]}
-    if isinstance(body, list):
-        tours = body
-    else:
-        tours = body.get("data") or body.get("tours") or []
+    items = body.get("items", [])
+    total = body.get("total", 0)
+    if not items:
+        return f"'{keyword or city}' 관련 관광지를 찾을 수 없습니다."
 
-    if not tours:
-        return f"'{keyword}' 관련 투어 상품을 찾을 수 없습니다."
-
-    lines: list[str] = []
-    for t in tours[:5]:
-        name = t.get("name") or t.get("title", "이름 없음")
-        tid = t.get("id", "")
-        price = t.get("price")
-        price_str = f" | {price}" if price else ""
-        lines.append(f"• [ID:{tid}] {name}{price_str}")
-        desc = str(t.get("description") or "").strip()
-        if desc:
-            lines.append(f"  {desc[:100]}")
-
+    lines = [f"[총 {total}건 중 {len(items)}건 표시]"]
+    for item in items:
+        lat = item.get("mapY") or ""
+        lng = item.get("mapX") or ""
+        coord = f" | 좌표: {lat}, {lng}" if lat and lng else ""
+        lines.append(
+            f"• [ID:{item.get('id')}] {item.get('title', '이름 없음')}\n"
+            f"  주소: {item.get('address') or '정보 없음'}{coord}"
+        )
     return "\n".join(lines)
 
 
 @tool
-def get_tour_detail(tour_id: str) -> str:
+def get_tourist_spot_detail(spot_id: int) -> str:
     """
-    TourCast API에서 특정 투어 상품의 상세 정보를 조회합니다.
+    TourCast DB에서 특정 관광지의 상세 정보를 조회합니다.
+    search_tourist_spots 결과의 ID 값을 사용하세요.
 
     Args:
-        tour_id: 투어 상품 ID (search_tours 결과의 ID 값)
+        spot_id: 관광지 ID (search_tourist_spots 결과의 ID)
 
     Returns:
-        투어 상세 정보 또는 오류 메시지
+        관광지 상세 정보 또는 오류 메시지
     """
-    if not settings.tourcast_api_key:
-        return "TourCast API 키가 설정되지 않았습니다. (.env TOURCAST_API_KEY 확인)"
+    try:
+        with httpx.Client(timeout=settings.tourcast_timeout) as client:
+            resp = client.get(f"{_tourcast_root_url()}/tourist-spots/{spot_id}")
+            resp.raise_for_status()
+            spot = resp.json()
+    except httpx.HTTPStatusError as e:
+        return f"관광지 조회 오류 (HTTP {e.response.status_code})"
+    except httpx.RequestError as e:
+        return f"TourCast API 연결 실패: {e}"
+
+    lines = [
+        f"장소명: {spot.get('title', '')}",
+        f"주소: {spot.get('address') or '정보 없음'}",
+    ]
+    if spot.get("overview"):
+        lines.append(f"설명: {spot['overview'][:200]}")
+    if spot.get("mapY") and spot.get("mapX"):
+        lines.append(f"좌표: 위도 {spot['mapY']}, 경도 {spot['mapX']}")
+    if spot.get("image"):
+        lines.append(f"이미지: {spot['image']}")
+    return "\n".join(lines)
+
+
+@tool
+def search_accommodations(keyword: str = "", city: str = "", limit: int = 10) -> str:
+    """
+    TourCast DB에서 숙박 시설을 키워드 또는 도시명으로 검색합니다.
+    호텔, 펜션, 모텔, 게스트하우스 등 숙박 정보를 찾을 때 사용하세요.
+
+    Args:
+        keyword: 검색 키워드 (예: "고양", "펜션", "호텔")
+        city:    도시명 필터 (예: "고양시", "부산시")
+        limit:   최대 결과 수 (기본값 10)
+
+    Returns:
+        숙박 시설 목록 또는 오류 메시지
+    """
+    if not keyword and not city:
+        return "keyword 또는 city 중 하나는 반드시 입력해 주세요."
+
+    params: dict = {"limit": min(limit, 20)}
+    if keyword:
+        params["keyword"] = keyword
+    if city:
+        params["city"] = city
 
     try:
         with httpx.Client(timeout=settings.tourcast_timeout) as client:
             resp = client.get(
-                f"{settings.tourcast_base_url}/tours/{tour_id}",
-                headers=_tourcast_headers(),
+                f"{_tourcast_root_url()}/api/accommodations",
+                params=params,
             )
             resp.raise_for_status()
             body = resp.json()
     except httpx.HTTPStatusError as e:
-        return f"투어 상세 조회 오류 (HTTP {e.response.status_code})"
+        return f"숙박 검색 오류 (HTTP {e.response.status_code})"
     except httpx.RequestError as e:
         return f"TourCast API 연결 실패: {e}"
 
-    tour = body.get("data", body) if isinstance(body, dict) else {}
-    if not tour:
-        return f"ID '{tour_id}'에 해당하는 투어를 찾을 수 없습니다."
+    items = body.get("items", [])
+    if not items:
+        return f"'{keyword or city}' 관련 숙박 시설을 찾을 수 없습니다."
 
-    lines: list[str] = [
-        f"투어명  : {tour.get('name') or tour.get('title', '')}",
-        f"ID      : {tour.get('id', tour_id)}",
-    ]
-    if tour.get("description"):
-        lines.append(f"설명    : {tour['description']}")
-    if tour.get("price"):
-        lines.append(f"가격    : {tour['price']}")
-    if tour.get("duration"):
-        lines.append(f"기간    : {tour['duration']}")
-    if tour.get("location") or tour.get("city"):
-        lines.append(f"위치    : {tour.get('location') or tour.get('city', '')}")
-    if tour.get("rating"):
-        lines.append(f"평점    : ★ {tour['rating']}")
-
+    lines = [f"[총 {body.get('total', 0)}건 중 {len(items)}건 표시]"]
+    for item in items:
+        tel = f" | 전화: {item['tel']}" if item.get("tel") else ""
+        lines.append(
+            f"• [ID:{item.get('id')}] {item.get('title', '이름 없음')}\n"
+            f"  주소: {item.get('address') or '정보 없음'}{tel}"
+        )
     return "\n".join(lines)
 
 
@@ -219,13 +262,10 @@ def search_nearby_places(
     Returns:
         반경 내 장소 목록 (거리 오름차순) 또는 오류 메시지
     """
-    import re
-    root_url = re.sub(r'/v\d+$', '', settings.tourcast_base_url.rstrip('/'))
-
     try:
         with httpx.Client(timeout=settings.tourcast_timeout) as client:
             resp = client.get(
-                f"{root_url}/api/spots/nearby",
+                f"{_tourcast_root_url()}/api/spots/nearby",
                 params={"lat": lat, "lng": lng, "radius": radius,
                         "limit": limit, "type": type},
             )

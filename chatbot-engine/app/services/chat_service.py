@@ -8,10 +8,11 @@ from app.core.config import settings
 from app.schemas.itinerary import ChatOutput, ItineraryItem
 from app.tools.travel_tools import (
     finalize_itinerary,
-    get_tour_detail,
+    get_tourist_spot_detail,
+    search_accommodations,
     search_nearby_places,
     search_places,
-    search_tours,
+    search_tourist_spots,
 )
 
 
@@ -19,9 +20,13 @@ def _build_system_prompt(lat: float | None, lng: float | None) -> str:
     base = (
         "너는 10년 경력의 친절한 여행 플래너야. 항상 한국어로 답변해.\n\n"
         "## 도구 사용 규칙\n"
-        "- 여행지·상품 정보 요청 시 search_places, search_tours, get_tour_detail 도구로 실제 데이터를 조회해.\n"
+        "- 특정 지역의 관광지·명소를 찾을 때: search_tourist_spots 사용 (keyword 또는 city 필수)\n"
+        "- 관광지 상세 정보가 필요할 때: get_tourist_spot_detail 사용\n"
+        "- 숙박 시설을 찾을 때: search_accommodations 사용\n"
+        "- Laravel에 등록된 장소를 찾을 때: search_places 사용\n"
         "- '근처', '주변', '가까운', '여기서' 등 위치 기반 표현이 나오면 "
-        "반드시 search_nearby_places 도구를 사용해. 절대 일반 추천으로 대체하지 마.\n\n"
+        "반드시 search_nearby_places 도구를 사용해. 절대 일반 추천으로 대체하지 마.\n"
+        "- 반드시 도구로 실제 데이터를 조회한 후 답변해. 임의로 장소를 지어내지 마.\n\n"
         "## 일정 확정 규칙 (중요)\n"
         "사용자가 '확정', '이걸로 해줘', '좋아', '그대로 가자' 등 일정에 동의하면 "
         "반드시 finalize_itinerary 도구를 호출해야 해.\n"
@@ -61,8 +66,8 @@ class ChatService:
             max_tokens=settings.openai_max_tokens,
         )
 
-        tools = [search_places, search_tours, get_tour_detail,
-                 search_nearby_places, finalize_itinerary]
+        tools = [search_places, search_tourist_spots, get_tourist_spot_detail,
+                 search_accommodations, search_nearby_places, finalize_itinerary]
 
         # LangGraph checkpointer — 인메모리 세션 관리
         # Upstash Redis는 RediSearch(FT.*)를 미지원하므로 MemorySaver 사용
