@@ -31,7 +31,10 @@ def _build_system_prompt(lat: float | None, lng: float | None) -> str:
         "사용자가 '확정', '이걸로 해줘', '좋아', '그대로 가자' 등 일정에 동의하면 "
         "반드시 finalize_itinerary 도구를 호출해야 해.\n"
         "- 텍스트로 JSON을 출력하는 것은 절대 금지\n"
-        "- finalize_itinerary 호출 시 모든 장소의 일차·시간·장소명·위도·경도·설명을 빠짐없이 포함\n"
+        "- finalize_itinerary 호출 시 모든 장소의 일차(day)·시간(time)·장소명(title)·"
+        "위도(latitude)·경도(longitude)·설명(description)·카테고리(category)를 빠짐없이 포함\n"
+        "- 카테고리는 attraction(관광지), restaurant(음식점), accommodation(숙박), "
+        "transport(교통), other(기타) 중 하나를 선택\n"
         "- 위도·경도는 실제 좌표값을 사용 (모르면 합리적인 근사값 사용)\n"
         "- 일정이 아직 논의 중이거나 사용자가 동의하지 않은 상태에서는 호출하지 마\n"
     )
