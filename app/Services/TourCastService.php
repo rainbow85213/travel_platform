@@ -17,6 +17,8 @@ class TourCastService
 
     private ?Client $scheduleClient = null;
 
+    private ?Client $rootClient = null;
+
     public function __construct(?Client $client = null)
     {
         if ($client === null && empty(config('services.tourcast.api_key'))) {
@@ -66,6 +68,30 @@ class TourCastService
     public function searchTours(string $keyword, array $params = []): array
     {
         return $this->get('/tours/search', array_merge(['q' => $keyword], $params));
+    }
+
+    /**
+     * TourCast 관광지 키워드 검색
+     *
+     * @return array<string, mixed>
+     *
+     * @throws TourCastException
+     */
+    public function searchTouristSpots(string $keyword, int $limit = 10): array
+    {
+        try {
+            $response = $this->getRootClient()->get('tourist-spots', [
+                'query' => ['keyword' => $keyword, 'limit' => $limit],
+            ]);
+
+            return json_decode($response->getBody()->getContents(), true) ?? [];
+        } catch (ConnectException $e) {
+            throw new TourCastException('TourCast API 연결 실패: ' . $e->getMessage(), 0, $e);
+        } catch (RequestException $e) {
+            $status = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $body   = $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : $e->getMessage();
+            throw new TourCastException("TourCast API 오류 (HTTP {$status}): {$body}", $status, $e);
+        }
     }
 
     // =========================================================================
@@ -236,6 +262,33 @@ class TourCastService
             Log::error('TourCast Schedule API 요청 실패', ['path' => $path, 'status' => $status, 'body' => $body]);
             throw new TourCastException("TourCast API 오류 (HTTP {$status}): {$body}", $status, $e);
         }
+    }
+
+    private function getRootClient(): Client
+    {
+        if ($this->rootClient === null) {
+            $this->rootClient = $this->buildRootClient();
+        }
+
+        return $this->rootClient;
+    }
+
+    private function buildRootClient(): Client
+    {
+        $baseUrl = rtrim(config('services.tourcast.base_url'), '/');
+        $rootUrl = preg_replace('/\/v\d+$/', '', $baseUrl);
+
+        $stack = HandlerStack::create();
+        $stack->push(Middleware::retry($this->retryDecider(), $this->retryDelay()));
+
+        return new Client([
+            'base_uri' => $rootUrl . '/',
+            'timeout'  => config('services.tourcast.timeout', 10),
+            'headers'  => [
+                'Accept' => 'application/json',
+            ],
+            'handler'  => $stack,
+        ]);
     }
 
     private function getScheduleClient(): Client
