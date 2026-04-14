@@ -28,6 +28,16 @@ class ChatRequest(BaseModel):
         description="대화 세션 ID. 최초 요청 시 생략하면 자동 생성됩니다.",
         examples=["user-123-session-abc"],
     )
+    latitude: float | None = Field(
+        default=None,
+        description="사용자 현재 위도. 근처 장소 검색 시 사용됩니다.",
+        examples=[37.5665],
+    )
+    longitude: float | None = Field(
+        default=None,
+        description="사용자 현재 경도. 근처 장소 검색 시 사용됩니다.",
+        examples=[126.9780],
+    )
 
 
 class ChatResponse(BaseModel):
@@ -52,7 +62,12 @@ async def send_message(body: ChatRequest, _: None = Depends(verify_token)) -> Ch
     이후 요청에서는 발급된 `session_id`를 반드시 포함하세요.
     """
     try:
-        result = _service.chat(message=body.message, session_id=body.session_id)
+        result = _service.chat(
+            message=body.message,
+            session_id=body.session_id,
+            latitude=body.latitude,
+            longitude=body.longitude,
+        )
         return ChatResponse(data={
             "session_id": body.session_id,
             "type":       result.type,

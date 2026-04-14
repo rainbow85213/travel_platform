@@ -197,6 +197,61 @@ def get_tour_detail(tour_id: str) -> str:
     return "\n".join(lines)
 
 
+@tool
+def search_nearby_places(
+    lat: float,
+    lng: float,
+    radius: float = 3.0,
+    limit: int = 10,
+    type: str = "all",
+) -> str:
+    """
+    사용자의 현재 위치(위도/경도) 기준으로 반경 내 관광지와 숙박을 검색합니다.
+    '근처', '주변', '가까운 곳' 등 위치 기반 요청에 반드시 사용하세요.
+
+    Args:
+        lat:    사용자 현재 위도 (시스템 프롬프트에서 제공된 값 사용)
+        lng:    사용자 현재 경도 (시스템 프롬프트에서 제공된 값 사용)
+        radius: 검색 반경 km (기본값 3, 최대 20)
+        limit:  최대 결과 수 (기본값 10)
+        type:   'tourist_spots' | 'accommodations' | 'all' (기본값 'all')
+
+    Returns:
+        반경 내 장소 목록 (거리 오름차순) 또는 오류 메시지
+    """
+    import re
+    root_url = re.sub(r'/v\d+$', '', settings.tourcast_base_url.rstrip('/'))
+
+    try:
+        with httpx.Client(timeout=settings.tourcast_timeout) as client:
+            resp = client.get(
+                f"{root_url}/api/spots/nearby",
+                params={"lat": lat, "lng": lng, "radius": radius,
+                        "limit": limit, "type": type},
+            )
+            resp.raise_for_status()
+            body = resp.json()
+    except httpx.HTTPStatusError as e:
+        return f"근처 장소 검색 오류 (HTTP {e.response.status_code})"
+    except httpx.RequestError as e:
+        return f"TourCast API 연결 실패: {e}"
+
+    items = body.get("items", [])
+    if not items:
+        return f"반경 {radius}km 내에 검색 결과가 없습니다."
+
+    lines = [f"[현재 위치 기준 반경 {body.get('radiusKm', radius)}km 내 장소]"]
+    for item in items:
+        cat = "관광지" if item.get("category") == "tourist_spot" else "숙박"
+        dist = item.get("distanceKm", "?")
+        lines.append(
+            f"• {item.get('title', '이름 없음')} ({cat}) — {dist}km\n"
+            f"  주소: {item.get('address') or '정보 없음'}\n"
+            f"  좌표: {item.get('lat')}, {item.get('lng')}"
+        )
+    return "\n".join(lines)
+
+
 @tool(args_schema=FinalizeItineraryInput)
 def finalize_itinerary(items: list[ItineraryItem]) -> str:
     """
